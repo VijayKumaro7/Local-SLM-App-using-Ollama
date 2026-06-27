@@ -51,6 +51,25 @@ Run small language models entirely offline on your hardware. Benchmark inference
 
    Open http://localhost:8501 in your browser.
 
+## 📸 Output / Screenshots
+
+The app runs as a three-page Streamlit dashboard. Below is the output captured from a live run.
+
+### Generate — Interactive Text Generation
+Enter a prompt, pick a model, and see the generated response alongside live performance metrics (latency, tokens, throughput).
+
+![Text Generation page showing generated output and performance metrics](output_images/generate.png)
+
+### Benchmark — Run the Full Suite
+Run all 3 models across the standardized prompt set and view per-model throughput and average latency.
+
+![Benchmark suite results for all three models](output_images/benchmark.png)
+
+### Comparison — Side-by-Side Trade-offs
+Compare speed, latency, quality ratings, and parameter counts across models in one view.
+
+![Model comparison table with speed, latency, and quality trade-offs](output_images/comparison.png)
+
 ## 📖 Usage
 
 ### 1. **Generate Tab** - Interactive Text Generation
