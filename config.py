@@ -1,6 +1,11 @@
 """Configuration for models, benchmarks, and Ollama connection."""
 
-OLLAMA_HOST = "http://localhost:11434"
+import os
+
+# Host of the Ollama server. Defaults to local, but can be overridden via the
+# OLLAMA_HOST environment variable / Streamlit secret so the app can point at a
+# remote Ollama instance when deployed online.
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 
 # Model definitions with metadata
 MODELS = {
