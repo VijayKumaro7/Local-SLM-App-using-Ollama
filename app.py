@@ -2,7 +2,7 @@ import streamlit as st
 import time
 import json
 from datetime import datetime
-from inference import OllamaInference
+from inference import OllamaInference, OllamaError
 from benchmark import run_benchmark, load_benchmark_results
 from config import MODELS, BENCHMARK_PROMPTS
 
@@ -22,14 +22,43 @@ if "benchmark_results" not in st.session_state:
 if "inference_history" not in st.session_state:
     st.session_state.inference_history = []
 
+# Shared Ollama client + availability detection
+inference = OllamaInference()
+ollama_up = inference.is_available()
+installed_models = inference.list_models() if ollama_up else []
+
+
+def model_installed(name: str) -> bool:
+    """True if a configured model is present locally (tolerant of :latest)."""
+    base = name.split(":")[0]
+    return name in installed_models or any(
+        m.split(":")[0] == base for m in installed_models
+    )
+
+
 # Sidebar navigation
 page = st.sidebar.radio("Navigation", ["Generate", "Benchmark", "Comparison"])
 
-# Model selector
+# Connection status
+if ollama_up:
+    st.sidebar.success("🟢 Ollama connected")
+else:
+    st.sidebar.error("🔴 Ollama not reachable — start it with `ollama serve`")
+
+# Model selector — label each model with its install status
 st.sidebar.markdown("### Model Settings")
+
+
+def model_label(name: str) -> str:
+    if not ollama_up:
+        return name
+    return f"{name} {'✅' if model_installed(name) else '⬇️ not pulled'}"
+
+
 selected_model = st.sidebar.selectbox(
     "Select Model",
     options=list(MODELS.keys()),
+    format_func=model_label,
     help="Choose which model to use for inference"
 )
 
@@ -40,6 +69,17 @@ st.sidebar.info(
     f"Est. Speed: {model_info['speed']}\n"
     f"Est. Quality: {model_info['quality']}"
 )
+
+# Offer to pull the selected model if it isn't installed
+if ollama_up and not model_installed(selected_model):
+    st.sidebar.warning(f"`{selected_model}` is not pulled yet.")
+    if st.sidebar.button(f"⬇️ Pull {selected_model}", use_container_width=True):
+        with st.spinner(f"Pulling {selected_model} (this can take a while)..."):
+            if inference.pull_model(selected_model):
+                st.sidebar.success(f"Pulled {selected_model}!")
+                st.rerun()
+            else:
+                st.sidebar.error(f"Failed to pull {selected_model}.")
 
 if page == "Generate":
     st.header("🎨 Text Generation")
@@ -59,31 +99,40 @@ if page == "Generate":
 
     if run_button and prompt:
         st.divider()
-        inference = OllamaInference()
 
-        with st.spinner(f"Generating with {selected_model}..."):
+        # Display results — stream tokens as they arrive
+        st.markdown("### Generated Output")
+        stats = {}
+        try:
             start_time = time.time()
-            response = inference.generate(
-                model=selected_model,
-                prompt=prompt,
-                temperature=temperature,
-                num_predict=max_tokens
+            output_text = st.write_stream(
+                inference.generate_stream(
+                    model=selected_model,
+                    prompt=prompt,
+                    stats=stats,
+                    temperature=temperature,
+                    num_predict=max_tokens,
+                )
             )
             elapsed = time.time() - start_time
+        except OllamaError as exc:
+            st.error(f"⚠️ {exc}")
+            st.stop()
 
-        # Display results
-        st.markdown("### Generated Output")
-        st.write(response["text"])
+        # Real token accounting from Ollama (falls back to wall-clock if absent)
+        tokens = stats.get("tokens_generated", 0)
+        eval_seconds = stats.get("eval_seconds", 0)
+        tps = tokens / eval_seconds if eval_seconds > 0 else (
+            tokens / elapsed if elapsed > 0 else 0
+        )
 
         # Performance metrics
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Time Elapsed", f"{elapsed:.2f}s")
         with col2:
-            tokens = len(response["text"].split())
             st.metric("Tokens Generated", tokens)
         with col3:
-            tps = tokens / elapsed if elapsed > 0 else 0
             st.metric("Throughput", f"{tps:.1f} tok/s")
         with col4:
             st.metric("Model", selected_model)
@@ -93,7 +142,7 @@ if page == "Generate":
             "timestamp": datetime.now().isoformat(),
             "model": selected_model,
             "prompt": prompt,
-            "output": response["text"],
+            "output": output_text,
             "time_elapsed": elapsed,
             "tokens_generated": tokens,
             "throughput": tps
