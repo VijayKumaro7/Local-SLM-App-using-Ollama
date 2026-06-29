@@ -73,10 +73,14 @@ Compare speed, latency, quality ratings, and parameter counts across models in o
 ## 📖 Usage
 
 ### 1. **Generate Tab** - Interactive Text Generation
-- Select a model
+- Select a model — the sidebar shows a live **🟢 Ollama connected** status and marks
+  each model as installed (✅) or not pulled (⬇️), with a one-click **Pull** button
 - Enter any prompt
 - Adjust temperature and max tokens
-- See real-time performance metrics (tokens/sec, latency)
+- Watch the response **stream token-by-token** as it's generated
+- See accurate performance metrics — throughput is computed from Ollama's real
+  `eval_count` / `eval_duration` (not a word-count estimate)
+- Friendly error messages if Ollama isn't running or the model isn't pulled
 
 ### 2. **Benchmark Tab** - Run Full Suite
 - Benchmark all 3 models on 13 standardized prompts
