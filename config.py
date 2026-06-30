@@ -7,8 +7,30 @@ import os
 # remote Ollama instance when deployed online.
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 
-# Model definitions with metadata
+# Model definitions with metadata.
+# The lightweight models are listed first so they are the default selection and
+# easy to pull/test (a few hundred MB to ~1GB) without the larger 7B/13B models.
 MODELS = {
+    "qwen2.5:0.5b": {
+        "name": "Qwen 2.5 0.5B",
+        "params": "0.5B",
+        "speed": "Very Fast (~80 tok/s)",
+        "quality": 5,
+        "description": "Tiny model (~400MB), great for quick local testing on CPU",
+        "use_case": "Smoke tests, low-resource devices, fast prototyping",
+        "pros": ["Tiny download", "Runs well on CPU", "Very fast"],
+        "cons": ["Lower quality", "Limited reasoning"],
+    },
+    "llama3.2:1b": {
+        "name": "Llama 3.2 1B",
+        "params": "1B",
+        "speed": "Very Fast (~60 tok/s)",
+        "quality": 6,
+        "description": "Small model (~1.3GB), good speed/quality balance for testing",
+        "use_case": "Lightweight chat, quick demos, resource-constrained setups",
+        "pros": ["Small download", "Fast on CPU", "Decent quality for size"],
+        "cons": ["Less capable than 7B+ models"],
+    },
     "llama2:7b": {
         "name": "Llama 2 7B",
         "params": "7B",
