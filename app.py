@@ -2,6 +2,8 @@ import streamlit as st
 import time
 import json
 from datetime import datetime
+import pandas as pd
+import plotly.express as px
 from inference import OllamaInference, OllamaError
 from benchmark import run_benchmark, load_benchmark_results
 from config import MODELS, BENCHMARK_PROMPTS
@@ -14,7 +16,7 @@ st.set_page_config(
 )
 
 st.title("📊 Local SLM Benchmark with Ollama")
-st.markdown("Compare inference speed and quality across 3 models running locally.")
+st.markdown("Compare inference speed and quality across local models running via Ollama.")
 
 # Initialize session state
 if "benchmark_results" not in st.session_state:
@@ -150,7 +152,7 @@ if page == "Generate":
 
 elif page == "Benchmark":
     st.header("⚡ Run Benchmark Suite")
-    st.markdown("Evaluate all 3 models on the same standardized prompts.")
+    st.markdown("Evaluate all configured models on the same standardized prompts.")
 
     col1, col2 = st.columns([2, 1])
     with col1:
@@ -166,19 +168,47 @@ elif page == "Benchmark":
 
     if st.session_state.benchmark_results:
         st.markdown("### Results")
-        results_df = json.dumps(st.session_state.benchmark_results, indent=2)
+        results = st.session_state.benchmark_results
 
-        col1, col2, col3 = st.columns(3)
+        # Per-model metric cards — one column per benchmarked model
+        benchmarked = [m for m in MODELS.keys() if m in results]
+        if benchmarked:
+            metric_cols = st.columns(len(benchmarked))
+            for col, model_name in zip(metric_cols, benchmarked):
+                data = results[model_name]
+                col.metric(
+                    model_name,
+                    f"{data['avg_throughput']:.2f} tok/s",
+                    f"Avg: {data['avg_time']:.2f}s"
+                )
 
-        for model_name in MODELS.keys():
-            if model_name in st.session_state.benchmark_results:
-                data = st.session_state.benchmark_results[model_name]
-                with col1 if model_name == list(MODELS.keys())[0] else (col2 if model_name == list(MODELS.keys())[1] else col3):
-                    st.metric(
-                        model_name,
-                        f"{data['avg_throughput']:.2f} tok/s",
-                        f"Avg: {data['avg_time']:.2f}s"
-                    )
+            # Interactive throughput chart
+            chart_df = pd.DataFrame([
+                {
+                    "Model": m,
+                    "Throughput (tok/s)": results[m]["avg_throughput"],
+                    "Avg Time (s)": results[m]["avg_time"],
+                }
+                for m in benchmarked
+            ])
+            fig = px.bar(
+                chart_df.sort_values("Throughput (tok/s)", ascending=False),
+                x="Model",
+                y="Throughput (tok/s)",
+                color="Model",
+                text_auto=".1f",
+                title="Average Throughput by Model",
+            )
+            fig.update_layout(showlegend=False)
+            st.plotly_chart(fig, use_container_width=True)
+
+        # Export the raw results
+        st.download_button(
+            "⬇️ Download results (JSON)",
+            data=json.dumps(results, indent=2),
+            file_name="benchmark_results.json",
+            mime="application/json",
+        )
 
 elif page == "Comparison":
     st.header("📈 Model Comparison")
@@ -198,7 +228,6 @@ elif page == "Comparison":
                 "Parameters": model_cfg["params"]
             })
 
-        import pandas as pd
         df = pd.DataFrame(comparison_data)
 
         col1, col2 = st.columns(2)
@@ -206,6 +235,12 @@ elif page == "Comparison":
         with col1:
             st.markdown("### Performance Metrics")
             st.dataframe(df, use_container_width=True)
+            st.download_button(
+                "⬇️ Download comparison (CSV)",
+                data=df.to_csv(index=False),
+                file_name="model_comparison.csv",
+                mime="text/csv",
+            )
 
         with col2:
             st.markdown("### Trade-offs Summary")
@@ -214,6 +249,36 @@ elif page == "Comparison":
                     st.write(f"**Speed:** {row['Speed (tok/s)']:.2f} tokens/sec")
                     st.write(f"**Quality:** {row['Quality Rating']}/10")
                     st.write(f"**Parameters:** {row['Parameters']}")
+
+        # Visual comparison
+        st.markdown("### Visual Comparison")
+        chart1, chart2 = st.columns(2)
+
+        with chart1:
+            fig_speed = px.bar(
+                df.sort_values("Speed (tok/s)", ascending=False),
+                x="Model",
+                y="Speed (tok/s)",
+                color="Model",
+                text_auto=".1f",
+                title="Speed (tokens/sec)",
+            )
+            fig_speed.update_layout(showlegend=False)
+            st.plotly_chart(fig_speed, use_container_width=True)
+
+        with chart2:
+            fig_tradeoff = px.scatter(
+                df,
+                x="Speed (tok/s)",
+                y="Quality Rating",
+                color="Model",
+                text="Model",
+                title="Speed vs Quality Tradeoff",
+            )
+            fig_tradeoff.update_traces(textposition="top center")
+            fig_tradeoff.update_yaxes(range=[0, 10])
+            fig_tradeoff.update_layout(showlegend=False)
+            st.plotly_chart(fig_tradeoff, use_container_width=True)
 
 # Footer with useful info
 st.divider()
