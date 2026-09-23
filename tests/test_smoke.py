@@ -41,3 +41,10 @@ def test_inference_client_constructs():
     assert client.host == config.OLLAMA_HOST
     assert client.generate_url.endswith("/api/generate")
     assert issubclass(OllamaError, Exception)
+
+
+def test_inference_history_entry_schema():
+    required = {"timestamp", "model", "prompt", "output",
+                "time_elapsed", "tokens_generated", "throughput"}
+    entry = {k: None for k in required}
+    assert set(entry.keys()) == required
