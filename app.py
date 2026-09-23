@@ -39,7 +39,7 @@ def model_installed(name: str) -> bool:
 
 
 # Sidebar navigation
-page = st.sidebar.radio("Navigation", ["Generate", "Benchmark", "Comparison"])
+page = st.sidebar.radio("Navigation", ["Generate", "Benchmark", "Comparison", "History"])
 
 # Connection status
 if ollama_up:
@@ -279,6 +279,63 @@ elif page == "Comparison":
             fig_tradeoff.update_yaxes(range=[0, 10])
             fig_tradeoff.update_layout(showlegend=False)
             st.plotly_chart(fig_tradeoff, use_container_width=True)
+
+elif page == "History":
+    st.header("🕓 Inference History")
+
+    history = st.session_state.inference_history
+
+    if not history:
+        st.info("No generations yet — go to **Generate** and run a prompt first.")
+    else:
+        # Summary row
+        avg_tps = sum(e["throughput"] for e in history) / len(history)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Total Generations", len(history))
+        c2.metric("Distinct Models", len({e["model"] for e in history}))
+        c3.metric("Avg Throughput", f"{avg_tps:.1f} tok/s")
+
+        st.markdown("### Sessions")
+
+        # Build display DataFrame (newest first)
+        rows = [
+            {
+                "Time": e["timestamp"][:19].replace("T", " "),
+                "Model": e["model"],
+                "Prompt": e["prompt"][:60] + ("…" if len(e["prompt"]) > 60 else ""),
+                "Tokens": e["tokens_generated"],
+                "Throughput (tok/s)": round(e["throughput"], 1),
+                "Duration (s)": round(e["time_elapsed"], 2),
+            }
+            for e in reversed(history)
+        ]
+        df_hist = pd.DataFrame(rows)
+        st.dataframe(df_hist, use_container_width=True, hide_index=True)
+
+        # CSV export
+        st.download_button(
+            "⬇️ Download history (CSV)",
+            data=df_hist.to_csv(index=False),
+            file_name="inference_history.csv",
+            mime="text/csv",
+        )
+
+        st.markdown("### Details")
+        for i, entry in enumerate(reversed(history)):
+            label = f"{entry['timestamp'][:19].replace('T', ' ')} — {entry['model']}"
+            with st.expander(label):
+                st.markdown(f"**Prompt:** {entry['prompt']}")
+                st.markdown("**Output:**")
+                st.write(entry["output"])
+                st.markdown(
+                    f"Tokens: **{entry['tokens_generated']}** · "
+                    f"Throughput: **{entry['throughput']:.1f} tok/s** · "
+                    f"Duration: **{entry['time_elapsed']:.2f}s**"
+                )
+
+        if st.button("🗑️ Clear History", type="secondary"):
+            st.session_state.inference_history = []
+            st.rerun()
 
 # Footer with useful info
 st.divider()
