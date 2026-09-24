@@ -48,3 +48,12 @@ def test_inference_history_entry_schema():
                 "time_elapsed", "tokens_generated", "throughput"}
     entry = {k: None for k in required}
     assert set(entry.keys()) == required
+
+
+def test_generate_method_signature():
+    import inspect
+    client = OllamaInference()
+    assert hasattr(client, "generate") and callable(client.generate)
+    sig = inspect.signature(client.generate)
+    assert "model" in sig.parameters
+    assert "prompt" in sig.parameters

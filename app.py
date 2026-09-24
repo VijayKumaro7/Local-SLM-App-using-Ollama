@@ -39,7 +39,10 @@ def model_installed(name: str) -> bool:
 
 
 # Sidebar navigation
-page = st.sidebar.radio("Navigation", ["Generate", "Benchmark", "Comparison", "History"])
+page = st.sidebar.radio(
+    "Navigation",
+    ["Generate", "Benchmark", "Comparison", "History", "Live Compare"]
+)
 
 # Connection status
 if ollama_up:
@@ -336,6 +339,71 @@ elif page == "History":
         if st.button("🗑️ Clear History", type="secondary"):
             st.session_state.inference_history = []
             st.rerun()
+
+elif page == "Live Compare":
+    import threading
+
+    st.header("⚖️ Live Model Comparison")
+    st.markdown("Run the same prompt on two models simultaneously and compare outputs.")
+
+    model_keys = list(MODELS.keys())
+    col_a, col_b = st.columns(2)
+    with col_a:
+        model_a = st.selectbox("Model A", model_keys, index=0, key="cmp_a")
+    with col_b:
+        model_b = st.selectbox("Model B", model_keys,
+                               index=min(1, len(model_keys) - 1), key="cmp_b")
+
+    prompt_cmp = st.text_area(
+        "Prompt", height=100,
+        placeholder="e.g., 'Explain recursion in one paragraph'"
+    )
+    temp_cmp = st.slider("Temperature", 0.0, 2.0, 0.7, key="cmp_temp")
+    tokens_cmp = st.number_input("Max Tokens", 50, 2000, 256, key="cmp_tokens")
+    run_cmp = st.button("▶ Run Comparison", type="primary", use_container_width=True)
+
+    if run_cmp and prompt_cmp:
+        if model_a == model_b:
+            st.warning("Select two different models for a meaningful comparison.")
+        else:
+            results_cmp: dict = {}
+
+            def _run(name: str) -> None:
+                try:
+                    results_cmp[name] = inference.generate(
+                        model=name,
+                        prompt=prompt_cmp,
+                        temperature=temp_cmp,
+                        num_predict=int(tokens_cmp),
+                    )
+                except OllamaError as exc:
+                    results_cmp[name] = {"error": str(exc)}
+
+            with st.spinner("Running both models in parallel…"):
+                t_a = threading.Thread(target=_run, args=(model_a,))
+                t_b = threading.Thread(target=_run, args=(model_b,))
+                t_a.start(); t_b.start()
+                t_a.join();  t_b.join()
+
+            left, right = st.columns(2)
+
+            def _show(col, name: str) -> None:
+                r = results_cmp.get(name, {})
+                col.subheader(name)
+                if "error" in r:
+                    col.error(f"⚠️ {r['error']}")
+                    return
+                tokens = r.get("tokens_generated", 0)
+                secs = r.get("eval_seconds", 0)
+                tps = tokens / secs if secs > 0 else 0
+                col.metric("Throughput", f"{tps:.1f} tok/s")
+                col.metric("Tokens", tokens)
+                col.metric("Time", f"{secs:.2f}s")
+                col.markdown("---")
+                col.write(r.get("text", ""))
+
+            _show(left, model_a)
+            _show(right, model_b)
 
 # Footer with useful info
 st.divider()
